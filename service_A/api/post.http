@@ -1,0 +1,27 @@
+# 422 - menos de oito caracteres
+POST http://localhost:8080/cep HTTP/1.1
+Content-Type: application/json
+
+{
+  "cep": "1234"
+}
+
+###
+
+# 422 - string invalida
+POST http://localhost:8080/cep HTTP/1.1
+Content-Type: application/json
+
+{
+  "cep": "1234A678"
+}
+
+###
+
+# 200
+POST http://localhost:8080/cep HTTP/1.1
+Content-Type: application/json
+
+{
+  "cep": "22460900"
+}
