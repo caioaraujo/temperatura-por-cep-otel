@@ -10,9 +10,9 @@ RUN go mod verify && \
 
 COPY . .
 
-RUN CGO_ENABLED=0 go build -o bin/service_A cmd/service_a/server/main.go
-RUN CGO_ENABLED=0 go build -o bin/service_B cmd/service_b/server/main.go
+RUN CGO_ENABLED=0 go build -o bin/cep-validator cmd/service_a/server/main.go
+RUN CGO_ENABLED=0 go build -o bin/temperatura-cep cmd/service_b/server/main.go
 
 FROM alpine:3.19
-COPY --from=builder /app/bin/service_A /usr/bin/service_A
-COPY --from=builder /app/bin/service_B /usr/bin/service_B
+COPY --from=builder /app/bin/cep-validator /usr/bin/cep-validator
+COPY --from=builder /app/bin/temperatura-cep /usr/bin/temperatura-cep
