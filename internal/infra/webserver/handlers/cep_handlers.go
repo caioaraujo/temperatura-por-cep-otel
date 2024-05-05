@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"regexp"
 )
@@ -33,7 +35,18 @@ func (h *CepHandler) PostCep(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	w.WriteHeader(http.StatusCreated)
+
+	externalUrl := fmt.Sprintf("http://localhost:8081/temperatura/%s", cepInput.Cep)
+	fmt.Printf("external URL: %s\n", externalUrl)
+	resp, err := http.Get(externalUrl)
+	if err != nil {
+		panic(err)
+	}
+	w.WriteHeader(resp.StatusCode)
+	defer resp.Body.Close()
+	// w.Header().Set("Content-Type", "application/json")
+	io.Copy(w, resp.Body)
+	return
 }
 
 func isCepValid(cep string) bool {
