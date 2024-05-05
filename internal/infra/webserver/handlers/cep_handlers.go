@@ -3,10 +3,13 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"go.opentelemetry.io/otel"
 	"io"
 	"net/http"
 	"regexp"
 )
+
+var tracer = otel.Tracer("cep-validation-request")
 
 type CepHandler struct{}
 
@@ -19,6 +22,9 @@ func NewCepHandler() *CepHandler {
 }
 
 func (h *CepHandler) PostCep(w http.ResponseWriter, r *http.Request) {
+	_, span := tracer.Start(r.Context(), "cep-validation")
+	defer span.End()
+
 	var cepInput CepInput
 	err := json.NewDecoder(r.Body).Decode(&cepInput)
 	if err != nil {
@@ -36,7 +42,7 @@ func (h *CepHandler) PostCep(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	externalUrl := fmt.Sprintf("http://localhost:8081/temperatura/%s", cepInput.Cep)
+	externalUrl := fmt.Sprintf("http://temperatura-cep:8081/temperatura/%s", cepInput.Cep)
 	fmt.Printf("external URL: %s\n", externalUrl)
 	resp, err := http.Get(externalUrl)
 	if err != nil {
