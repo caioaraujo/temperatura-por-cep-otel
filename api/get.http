@@ -1,0 +1,12 @@
+# 422 - caracteres invalidos
+GET http://localhost:8081/temperatura/0123-567
+
+###
+
+# 404
+GET http://localhost:8081/temperatura/12345678
+
+###
+
+# 200
+GET http://localhost:8081/temperatura/22460900
