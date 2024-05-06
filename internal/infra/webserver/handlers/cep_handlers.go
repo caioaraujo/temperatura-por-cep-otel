@@ -3,13 +3,19 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
-	"go.opentelemetry.io/otel"
 	"io"
 	"net/http"
 	"regexp"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/metric"
 )
 
-var tracer = otel.Tracer("cep-validation-request")
+var (
+	tracer      = otel.Tracer("cep-validation-request")
+	meter       = otel.Meter("cep-validation-info-service")
+	viewCounter metric.Int64Counter
+)
 
 type CepHandler struct{}
 
@@ -21,9 +27,21 @@ func NewCepHandler() *CepHandler {
 	return &CepHandler{}
 }
 
+func init() {
+	var err error
+	viewCounter, err = meter.Int64Counter("user.views",
+		metric.WithDescription("The number of views"),
+		metric.WithUnit("{views}"))
+	if err != nil {
+		panic(err)
+	}
+}
+
 func (h *CepHandler) PostCep(w http.ResponseWriter, r *http.Request) {
-	_, span := tracer.Start(r.Context(), "cep-validation")
+	ctx, span := tracer.Start(r.Context(), "cep-validation")
 	defer span.End()
+
+	viewCounter.Add(ctx, 1)
 
 	var cepInput CepInput
 	err := json.NewDecoder(r.Body).Decode(&cepInput)
