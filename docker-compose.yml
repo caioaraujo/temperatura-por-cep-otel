@@ -4,7 +4,7 @@ services:
   service-a:
     container_name: cep-validator
     build:
-      context: .
+      context: ./service_a
       dockerfile: Dockerfile
     entrypoint: ["cep-validator"]
     ports:
@@ -13,25 +13,21 @@ services:
   service-b:
     container_name: temperatura-cep
     build:
-      context: .
+      context: ./service_b
       dockerfile: Dockerfile
     entrypoint: ["temperatura-cep"]
     ports:
       - "8081:8081"
     
-  jaeger:
-    image: jaegertracing/all-in-one:1.53
-    container_name: jaeger
-    environment:
-      COLLECTOR_ZIPKIN_HOST_PORT: :9411
+  collector:
+    restart: always
+    image: otel/opentelemetry-collector:latest
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./.docker/otel-collector-config.yaml:/etc/otel-collector-config.yaml
+
+  zipkin:
+    restart: always
+    image: openzipkin/zipkin:latest
     ports:
-      - 6831:6831/udp
-      - 6832:6832/udp
-      - 5778:5778 
-      - 16686:16686 
-      - 4317:4317 
-      - 4318:4318 
-      - 14250:14250
-      - 14268:14268
-      - 14269:14269
-      - 9411:9411
+      - "9411:9411"
