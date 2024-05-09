@@ -9,6 +9,7 @@ import (
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/propagation"
 )
 
 var (
@@ -27,18 +28,14 @@ func NewCepHandler() *CepHandler {
 	return &CepHandler{}
 }
 
-func init() {
-	var err error
-	viewCounter, err = meter.Int64Counter("user.views",
-		metric.WithDescription("The number of views"),
-		metric.WithUnit("{views}"))
-	if err != nil {
-		panic(err)
-	}
-}
-
 func (h *CepHandler) PostCep(w http.ResponseWriter, r *http.Request) {
-	ctx, span := tracer.Start(r.Context(), "cep-validation")
+	carrier := propagation.HeaderCarrier(r.Header)
+	ctx := r.Context()
+	ctx = otel.GetTextMapPropagator().Extract(ctx, carrier)
+
+	tracer := otel.Tracer("cep-validator-request-tracer")
+	ctx, span := tracer.Start(ctx, "cep-validator-temperatura-request")
+
 	defer span.End()
 
 	viewCounter.Add(ctx, 1)
@@ -64,11 +61,11 @@ func (h *CepHandler) PostCep(w http.ResponseWriter, r *http.Request) {
 	fmt.Printf("external URL: %s\n", externalUrl)
 	resp, err := http.Get(externalUrl)
 	if err != nil {
-		panic(err)
+		http.Error(w, "erro ao buscar temperatura", http.StatusInternalServerError)
+		return
 	}
 	w.WriteHeader(resp.StatusCode)
 	defer resp.Body.Close()
-	// w.Header().Set("Content-Type", "application/json")
 	io.Copy(w, resp.Body)
 	return
 }

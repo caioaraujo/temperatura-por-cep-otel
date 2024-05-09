@@ -2,64 +2,49 @@ package main
 
 import (
 	"context"
-	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"time"
 
 	"github.com/caioaraujo/temperatura-por-cep-otel/internal/infra/webserver/handlers"
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/exporters/stdout/stdoutmetric"
-	"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
-	"go.opentelemetry.io/otel/exporters/zipkin"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/propagation"
-	"go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	"go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 var logger = log.New(os.Stderr, "zipkin-example", log.Ldate|log.Ltime|log.Llongfile)
 
+var (
+	serviceName = "cep-validator"
+	serviceUrl  = "collector:4317"
+)
+
 func main() {
-	url := flag.String("zipkin", "http://localhost:9411/api/v2/spans", "zipkin url")
-	flag.Parse()
+	log.Println("Starting service-a server.")
 
-	consoleMetricExporter, err := newMetricExporter()
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer cancel()
+
+	shutdown, err := initProvider(ctx, serviceName, serviceUrl)
 	if err != nil {
 		panic(err)
 	}
 
-	ctx := context.Background()
-
-	exporter, err := zipkin.New(
-		*url,
-		zipkin.WithLogger(logger),
-	)
-	if err != nil {
-		panic(err)
-	}
-
-	batcher := trace.NewBatchSpanProcessor(exporter)
-
-	tp := trace.NewTracerProvider(
-		trace.WithSpanProcessor(batcher),
-		trace.WithResource(resource.NewWithAttributes(
-			semconv.SchemaURL,
-			semconv.ServiceName("zipkin-test"),
-		)),
-	)
-	otel.SetTracerProvider(tp)
-	defer tp.Shutdown(ctx)
-
-	meterProvider := newMeterProvider(consoleMetricExporter)
-	defer meterProvider.Shutdown(ctx)
-	otel.SetMeterProvider(meterProvider)
-
-	prop := newPropagator()
-	otel.SetTextMapPropagator(prop)
+	defer func() {
+		if err := shutdown(ctx); err != nil {
+			panic(err)
+		}
+	}()
 
 	cepHandler := handlers.NewCepHandler()
 	r := chi.NewRouter()
@@ -75,23 +60,39 @@ func main() {
 	}
 }
 
-func newTraceExporter() (trace.SpanExporter, error) {
-	return stdouttrace.New(stdouttrace.WithPrettyPrint())
-}
+func initProvider(ctx context.Context, serviceName, serviceURL string) (shutdown func(context.Context) error, err error) {
+	res, err := resource.New(ctx, resource.WithAttributes(semconv.ServiceName(serviceName)))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create resource: %w", err)
+	}
 
-func newMetricExporter() (metric.Exporter, error) {
-	return stdoutmetric.New()
-}
+	ctx, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
 
-func newMeterProvider(meterExporter metric.Exporter) *metric.MeterProvider {
-	meterProvider := metric.NewMeterProvider(
-		metric.WithReader(metric.NewPeriodicReader(meterExporter)),
+	conn, err := grpc.DialContext(
+		ctx,
+		serviceURL,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithBlock(),
 	)
-	return meterProvider
-}
+	if err != nil {
+		return nil, fmt.Errorf("failed to create gRPC connection to collector: %w", err)
+	}
 
-func newPropagator() propagation.TextMapPropagator {
-	return propagation.NewCompositeTextMapPropagator(
-		propagation.TraceContext{},
+	tracerExporter, err := otlptracegrpc.New(ctx, otlptracegrpc.WithGRPCConn(conn))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create trace exporter: %w", err)
+	}
+
+	bsp := trace.NewBatchSpanProcessor(tracerExporter)
+	traceProvider := trace.NewTracerProvider(
+		trace.WithSampler(trace.AlwaysSample()),
+		trace.WithResource(res),
+		trace.WithSpanProcessor(bsp),
 	)
+	otel.SetTracerProvider(traceProvider)
+
+	otel.SetTextMapPropagator(propagation.TraceContext{})
+
+	return traceProvider.Shutdown, nil
 }

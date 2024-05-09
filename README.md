@@ -12,7 +12,8 @@ Busca a temperatura da localização do CEP.
 ## Execução servidor
 `docker-compose up --build`
 
-Porta padrão: 8080
+Porta padrão serviço A (cep-validator): 8080
+Porta padrão serviço B (temperatura-cep): 8081
 
 ## Api
 Utilize a rota `POST /cep/` onde o valor do CEP deve ser somente números.

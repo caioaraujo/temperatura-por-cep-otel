@@ -10,6 +10,8 @@ import (
 	"strconv"
 
 	"github.com/go-chi/chi"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 )
 
 type WeatherHandler struct{}
@@ -44,6 +46,14 @@ func NewWeatherHandler() *WeatherHandler {
 }
 
 func (h *WeatherHandler) GetWeather(w http.ResponseWriter, r *http.Request) {
+	carrier := propagation.HeaderCarrier(r.Header)
+	ctx := r.Context()
+	ctx = otel.GetTextMapPropagator().Extract(ctx, carrier)
+
+	tracer := otel.Tracer("temperatura-cep-request-tracer")
+	ctx, span := tracer.Start(ctx, "temperatura-cep-request")
+	defer span.End()
+
 	invalidZipcodeMessage := "Invalid zipcode"
 	zipcodeNotFound := "can not find zipcode"
 	cep := chi.URLParam(r, "cep")
