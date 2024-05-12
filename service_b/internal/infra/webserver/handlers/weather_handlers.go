@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"log"
@@ -12,6 +13,7 @@ import (
 	"github.com/go-chi/chi"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type WeatherHandler struct{}
@@ -51,8 +53,6 @@ func (h *WeatherHandler) GetWeather(w http.ResponseWriter, r *http.Request) {
 	ctx = otel.GetTextMapPropagator().Extract(ctx, carrier)
 
 	tracer := otel.Tracer("temperatura-cep-request-tracer")
-	ctx, span := tracer.Start(ctx, "temperatura-cep-request")
-	defer span.End()
 
 	invalidZipcodeMessage := "Invalid zipcode"
 	zipcodeNotFound := "can not find zipcode"
@@ -68,7 +68,8 @@ func (h *WeatherHandler) GetWeather(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cepResponse := buscaCEP(cep)
+	cepResponse := buscaCEP(ctx, tracer, cep)
+
 	if cepResponse.Cep == "" {
 		w.WriteHeader(http.StatusNotFound)
 		err := json.NewEncoder(w).Encode(&zipcodeNotFound)
@@ -78,7 +79,11 @@ func (h *WeatherHandler) GetWeather(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Printf("CEP encontrado: %v", cepResponse)
+
+	ctx, span := tracer.Start(ctx, "temperatura-request")
 	temperatura := buscaTemperatura(cepResponse)
+	span.End()
+
 	log.Printf("WeatherApiResponse: %v", temperatura)
 	kelvin := temperatura.Current.TempC + 273
 	response := WeatherResponse{
@@ -99,17 +104,25 @@ func isValidCep(cep string) bool {
 	return true
 }
 
-func buscaCEP(cep string) Localizacao {
+func buscaCEP(ctx context.Context, tracer trace.Tracer, cep string) Localizacao {
+	ctx, span := tracer.Start(ctx, "cep-request")
+	defer span.End()
 	address := "http://viacep.com.br/ws/" + cep + "/json/"
-	req, err := http.Get(address)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, address, nil)
 	if err != nil {
 		panic(err)
 	}
-	if req.StatusCode != http.StatusOK {
-		panic("Erro ao fazer requisição para ViaCEP: status code diferente de 200: " + strconv.Itoa(req.StatusCode))
+	req.Header.Set("Accept", "application/json")
+	otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(req.Header))
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		panic(err)
 	}
-	defer req.Body.Close()
-	res, err := io.ReadAll(req.Body)
+	if resp.StatusCode != http.StatusOK {
+		panic("Erro ao fazer requisição para ViaCEP: status code diferente de 200: " + strconv.Itoa(resp.StatusCode))
+	}
+	defer resp.Body.Close()
+	res, err := io.ReadAll(resp.Body)
 	if err != nil {
 		panic(err)
 	}

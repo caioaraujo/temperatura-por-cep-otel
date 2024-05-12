@@ -2,6 +2,7 @@ version: '3'
 
 services:
   service-a:
+    restart: always
     container_name: cep-validator
     build:
       context: ./service_a
@@ -11,6 +12,7 @@ services:
       - "8080:8080"
 
   service-b:
+    restart: always
     container_name: temperatura-cep
     build:
       context: ./service_b

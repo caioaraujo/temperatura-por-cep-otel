@@ -22,8 +22,6 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-var logger = log.New(os.Stderr, "zipkin-example", log.Ldate|log.Ltime|log.Llongfile)
-
 var (
 	serviceName = "cep-validator"
 	serviceUrl  = "collector:4317"
@@ -50,6 +48,8 @@ func main() {
 	r := chi.NewRouter()
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Logger)
+	r.Use(middleware.RequestID)
+	r.Use(middleware.RealIP)
 	r.Route("/cep", func(r chi.Router) {
 		r.Post("/", cepHandler.PostCep)
 	})
@@ -66,7 +66,7 @@ func initProvider(ctx context.Context, serviceName, serviceURL string) (shutdown
 		return nil, fmt.Errorf("failed to create resource: %w", err)
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, time.Second)
+	ctx, cancel := context.WithTimeout(ctx, time.Second*10)
 	defer cancel()
 
 	conn, err := grpc.DialContext(
