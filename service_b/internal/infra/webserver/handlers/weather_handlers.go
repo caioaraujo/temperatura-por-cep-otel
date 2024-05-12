@@ -37,7 +37,7 @@ type WeatherApiResponse struct {
 }
 
 type WeatherResponse struct {
-	City  string  `json:city`
+	City  string  `json:"city"`
 	TempC float64 `json:"temp_C"`
 	TempF float64 `json:"temp_F"`
 	TempK float64 `json:"temp_K"`
@@ -80,11 +80,9 @@ func (h *WeatherHandler) GetWeather(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("CEP encontrado: %v", cepResponse)
 
-	ctx, span := tracer.Start(ctx, "temperatura-request")
-	temperatura := buscaTemperatura(cepResponse)
-	span.End()
-
+	temperatura := buscaTemperatura(ctx, tracer, cepResponse)
 	log.Printf("WeatherApiResponse: %v", temperatura)
+
 	kelvin := temperatura.Current.TempC + 273
 	response := WeatherResponse{
 		City:  cepResponse.Localidade,
@@ -134,7 +132,10 @@ func buscaCEP(ctx context.Context, tracer trace.Tracer, cep string) Localizacao 
 	return data
 }
 
-func buscaTemperatura(localizacao Localizacao) WeatherApiResponse {
+func buscaTemperatura(ctx context.Context, tracer trace.Tracer, localizacao Localizacao) WeatherApiResponse {
+	ctx, span := tracer.Start(ctx, "temperatura-request")
+	span.End()
+
 	location := url.QueryEscape(localizacao.Localidade)
 	address := "http://api.weatherapi.com/v1/current.json?key=e01c72f7886a4af1a7932746240704&q=" + location + "&aqi=no"
 	log.Printf("URL WEATHER API: %s", address)
