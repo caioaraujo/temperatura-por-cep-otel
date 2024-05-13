@@ -9,7 +9,7 @@ import (
 	"os/signal"
 	"time"
 
-	"github.com/caioaraujo/temperatura-por-cep-otel/internal/infra/webserver/handlers"
+	"github.com/caioaraujo/temperatura-por-cep-otel/service_a/internal/infra/webserver/handlers"
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
 	"go.opentelemetry.io/otel"

@@ -3,7 +3,6 @@ module github.com/caioaraujo/temperatura-por-cep-otel/service_a
 go 1.22.2
 
 require (
-	github.com/caioaraujo/temperatura-por-cep-otel v0.0.0-20240506164915-6fc2c4e47c2f
 	github.com/go-chi/chi v1.5.5
 	go.opentelemetry.io/otel v1.26.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.26.0
