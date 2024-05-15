@@ -26,3 +26,7 @@ Response ex: `{ "city: "São Paulo", "temp_C": 28.5, "temp_F": 28.5, "temp_K": 2
 - 200: Success
 - 422: Invalid zipcode
 - 404: can not find zipcode
+
+## Zipkin
+
+Após a requisição, verifique o resultado no Zipkin: http://localhost:9411/

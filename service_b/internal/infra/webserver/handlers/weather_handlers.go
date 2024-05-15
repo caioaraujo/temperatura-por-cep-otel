@@ -52,7 +52,7 @@ func (h *WeatherHandler) GetWeather(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	ctx = otel.GetTextMapPropagator().Extract(ctx, carrier)
 
-	tracer := otel.Tracer("temperatura-cep-request-tracer")
+	cep_tracer := otel.Tracer("temperatura-cep-request-tracer")
 
 	invalidZipcodeMessage := "Invalid zipcode"
 	zipcodeNotFound := "can not find zipcode"
@@ -68,7 +68,7 @@ func (h *WeatherHandler) GetWeather(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cepResponse := buscaCEP(ctx, tracer, cep)
+	cepResponse := buscaCEP(ctx, cep_tracer, cep)
 
 	if cepResponse.Cep == "" {
 		w.WriteHeader(http.StatusNotFound)
@@ -80,7 +80,8 @@ func (h *WeatherHandler) GetWeather(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("CEP encontrado: %v", cepResponse)
 
-	temperatura := buscaTemperatura(ctx, tracer, cepResponse)
+	temperatura_tracer := otel.Tracer("temperatura-temperatura-request-tracer")
+	temperatura := buscaTemperatura(ctx, temperatura_tracer, cepResponse)
 	log.Printf("WeatherApiResponse: %v", temperatura)
 
 	kelvin := temperatura.Current.TempC + 273
@@ -134,20 +135,25 @@ func buscaCEP(ctx context.Context, tracer trace.Tracer, cep string) Localizacao 
 
 func buscaTemperatura(ctx context.Context, tracer trace.Tracer, localizacao Localizacao) WeatherApiResponse {
 	ctx, span := tracer.Start(ctx, "temperatura-request")
-	span.End()
+	defer span.End()
 
 	location := url.QueryEscape(localizacao.Localidade)
 	address := "http://api.weatherapi.com/v1/current.json?key=e01c72f7886a4af1a7932746240704&q=" + location + "&aqi=no"
 	log.Printf("URL WEATHER API: %s", address)
-	req, err := http.Get(address)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, address, nil)
 	if err != nil {
 		panic(err)
 	}
-	if req.StatusCode != http.StatusOK {
-		panic("Erro ao fazer requisição para ViaCEP: status code diferente de 200: " + strconv.Itoa(req.StatusCode))
+	req.Header.Set("Accept", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		panic(err)
 	}
-	defer req.Body.Close()
-	res, err := io.ReadAll(req.Body)
+	if resp.StatusCode != http.StatusOK {
+		panic("Erro ao fazer requisição para ViaCEP: status code diferente de 200: " + strconv.Itoa(resp.StatusCode))
+	}
+	defer resp.Body.Close()
+	res, err := io.ReadAll(resp.Body)
 	if err != nil {
 		panic(err)
 	}
